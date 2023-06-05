@@ -1,42 +1,29 @@
 import http from 'node:http'
-import { randomUUID } from 'node:crypto'
 import { json } from './middlewares/json.js'
-import { Database } from './database.js'
+import { routes } from './routes.js'
+import { extractQueryParams } from './utils/extract-query-params.js'
 
-const database = new Database()
 
 const server = http.createServer(async (request, response)=>{
   const { method, url } = request
 
   await json(request, response)
 
-  if( method === 'GET' && url === '/users'){
-    const users = database.select('users')
+  const route = routes.find(route => {
+    return  route.method === method && route.path.test(url)
+  })
 
-    return response.end(JSON.stringify(users, null, 2))
-  }
-
-  if( method === 'POST' && url === '/users'){
-    const {name, email} = request.body 
+  if(route){
+    const routeParams = request.url.match(route.path)
     
-    const user = {
-      id: randomUUID(),
-      name: name,
-      email: email
-    }
+    const { query, ...params } = routeParams.groups
+    request.params  = params
+    request.query = query ? extractQueryParams(query) : {}
 
-    database.insert('users', user)
-
-    return response
-    .writeHead(201)
-    .end('Criação de usuários')
+    return route.handler(request, response)
   }
 
-  if( method === 'PATCH' && url === '/users'){
-    return response.end('Edição de usuários')
-  }
-
-  return response.writeHead(201).end('Resource not found')
+  return response.writeHead(404).end('Resource not found')
 })
 
 server.listen(3333)
